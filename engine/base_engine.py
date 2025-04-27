@@ -26,6 +26,10 @@ class LLMEngine():
         #     self.engine = DeepSeekEngine(llm_engine_name)
         
         # Bedrock engine
+        elif llm_engine_name.startswith("vllm"):
+            llm_engine_name = llm_engine_name.split("_")[1]
+            from engine.vllm_engine import VLLMEngine
+            self.engine = VLLMEngine(llm_engine_name)
         else:
             from engine.bedrock_engine import BedrockEngine
             self.engine = BedrockEngine(llm_engine_name)

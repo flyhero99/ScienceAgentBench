@@ -88,7 +88,8 @@ def main(args):
                     if histories[index]["history"][-1]["role"] == "assistant":
                         response = histories[index]["history"][-1]["content"]
                         
-                        result = replace_path_pattern(response)
+                        # result = replace_path_pattern(response)
+                        result = response
                         
                         # match = re.search(r"```python(.*?)```", response, re.DOTALL)
                         # if match:

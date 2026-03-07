@@ -186,3 +186,5 @@ run_evaluation.sh
 pred_programs*/
 docker_run.sh
 run_eval_old.sh
+
+*.zip

@@ -35,8 +35,8 @@ Here are some helpful previews for the dataset file(s):
 
 class ScienceAgent():
     def __init__(self, llm_engine_name, context_cutoff=28000, use_self_debug=False, use_knowledge=False):
-        self.llm_engine = LLMEngine(llm_engine_name)
-        self.llm_cost = model_cost[llm_engine_name] if "vllm" not in llm_engine_name else model_cost["gpt-4o"]
+        self.llm_engine = LLMEngine(llm_engine_name, api_key=os.getenv("AZURE_OPENAI_API_KEY"), api_version=os.getenv("AZURE_OPENAI_API_VERSION"), azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"))
+        self.llm_cost = model_cost[llm_engine_name] if "azure_" not in llm_engine_name else model_cost[llm_engine_name.split("azure_")[1]]
 
         self.context_cutoff = context_cutoff
         self.use_self_debug = use_self_debug
@@ -138,7 +138,7 @@ class ScienceAgent():
             trimmed_err_msg = trim_messages(
                 [{'role': 'user', 'content': err_msg}], 
                 self.llm_engine.llm_engine_name, 
-                max_tokens=2000
+                max_tokens=16000
             )[0]["content"]
 
             if len(trimmed_err_msg) < len(err_msg):
@@ -174,7 +174,7 @@ class ScienceAgent():
                 trimmed_err_msg = trim_messages(
                     [{'role': 'user', 'content': err_msg}], 
                     self.llm_engine.llm_engine_name, 
-                    max_tokens=2000
+                    max_tokens=16000
                 )[0]["content"]
 
                 if len(trimmed_err_msg) < len(err_msg):
@@ -186,7 +186,7 @@ class ScienceAgent():
                 {'role': 'user', 'content': err_msg}
             ]
 
-            assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(user_input, temperature=0.2, top_p=0.95)
+            assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(user_input, temperature=0.2, top_p=0.95, max_tokens=16000)
 
             cost = (
                 self.llm_cost["input_cost_per_token"] * prompt_tokens +
@@ -212,7 +212,7 @@ class ScienceAgent():
             {'role': 'user', 'content': self.sys_msg}
         ]
 
-        assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(user_input, temperature=0.2, top_p=0.95)
+        assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(user_input, temperature=0.2, top_p=0.95, max_tokens=16000)
 
         cost = (
             self.llm_cost["input_cost_per_token"] * prompt_tokens +

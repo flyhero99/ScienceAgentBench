@@ -1,0 +1,12 @@
+[
+  {
+    "experiment_dir": "/home/ec2-user/ScienceAgentBench/claude_code_outputs_opus46",
+    "pred_program_dir": "/home/ec2-user/ScienceAgentBench/claude_code_outputs_opus46/pred_programs",
+    "run_log": "/home/ec2-user/ScienceAgentBench/batch_eval_outputs/run_recovered_claude_code_outputs_opus46.jsonl",
+    "eval_log": "/home/ec2-user/ScienceAgentBench/batch_eval_outputs/eval_claude_code_outputs_opus46.jsonl",
+    "success_rate": -1.0,
+    "codebert_score": -1.0,
+    "valid_program_rate": -1.0,
+    "cost": -1.0
+  }
+]

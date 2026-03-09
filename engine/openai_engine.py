@@ -3,6 +3,27 @@ from openai import OpenAI, APIConnectionError, APITimeoutError, RateLimitError, 
 import backoff
 
 
+def _get_field(obj, key, default=0):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _extract_reasoning_tokens_from_usage(usage):
+    # Responses API: usage.output_tokens_details.reasoning_tokens
+    output_details = _get_field(usage, "output_tokens_details", None)
+    reasoning_tokens = _get_field(output_details, "reasoning_tokens", 0)
+    if reasoning_tokens:
+        return int(reasoning_tokens)
+
+    # Chat Completions (some models): usage.completion_tokens_details.reasoning_tokens
+    completion_details = _get_field(usage, "completion_tokens_details", None)
+    reasoning_tokens = _get_field(completion_details, "reasoning_tokens", 0)
+    return int(reasoning_tokens or 0)
+
+
 @backoff.on_exception(backoff.expo, (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError))
 def openai_chat_engine(
     client,
@@ -14,8 +35,6 @@ def openai_chat_engine(
     enable_reasoning=False,
     reasoning_effort="medium",
 ):
-    # Keep legacy behavior by default. If reasoning is enabled, pass reasoning
-    # hints when supported by the model/API.
     kwargs = {
         "model": engine,
         "messages": msg,
@@ -35,8 +54,7 @@ def openai_chat_engine(
     if enable_reasoning:
         kwargs["reasoning"] = {"effort": reasoning_effort}
 
-    response = client.chat.completions.create(**kwargs)
-    return response
+    return client.chat.completions.create(**kwargs)
 
 
 @backoff.on_exception(backoff.expo, (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError))
@@ -50,7 +68,6 @@ def openai_responses_engine(
     enable_reasoning=False,
     reasoning_effort="medium",
 ):
-    # Responses API is preferred for reasoning models (e.g., GPT-5 family)
     kwargs = {
         "model": engine,
         "input": msg,
@@ -64,8 +81,7 @@ def openai_responses_engine(
     if enable_reasoning:
         kwargs["reasoning"] = {"effort": reasoning_effort}
 
-    response = client.responses.create(**kwargs)
-    return response
+    return client.responses.create(**kwargs)
 
 
 class OpenaiEngine:
@@ -103,9 +119,13 @@ class OpenaiEngine:
 
             content = response.output_text or ""
             usage = getattr(response, "usage", None)
-            prompt_tokens = getattr(usage, "input_tokens", 0) if usage else 0
-            completion_tokens = getattr(usage, "output_tokens", 0) if usage else 0
-            return content, prompt_tokens, completion_tokens
+            prompt_tokens = int(_get_field(usage, "input_tokens", 0) or 0)
+            completion_tokens = int(_get_field(usage, "output_tokens", 0) or 0)
+            meta = {
+                "reasoning_tokens": _extract_reasoning_tokens_from_usage(usage),
+                "api_mode": "responses",
+            }
+            return content, prompt_tokens, completion_tokens, meta
 
         response = openai_chat_engine(
             self.client,
@@ -118,8 +138,11 @@ class OpenaiEngine:
             reasoning_effort=reasoning_effort,
         )
 
-        return (
-            response.choices[0].message.content,
-            response.usage.prompt_tokens,
-            response.usage.completion_tokens,
-        )
+        usage = getattr(response, "usage", None)
+        prompt_tokens = int(_get_field(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(_get_field(usage, "completion_tokens", 0) or 0)
+        meta = {
+            "reasoning_tokens": _extract_reasoning_tokens_from_usage(usage),
+            "api_mode": "chat_completions",
+        }
+        return response.choices[0].message.content, prompt_tokens, completion_tokens, meta

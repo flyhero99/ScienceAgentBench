@@ -146,9 +146,14 @@ class BedrockEngine():
             )
         except (ClientError, Exception) as e:
             print(f"ERROR: Can't invoke '{self.llm_engine_name}'. Reason: {e}")
-            return "ERROR", 0, 0
+            return "ERROR", 0, 0, {"reasoning_tokens": 0, "api_mode": "error"}
 
-        return response["output"]["message"]["content"][0]["text"], response["usage"]["inputTokens"], response["usage"]["outputTokens"]
+        return (
+            response["output"]["message"]["content"][0]["text"],
+            response["usage"]["inputTokens"],
+            response["usage"]["outputTokens"],
+            {"reasoning_tokens": 0, "api_mode": "bedrock_converse"},
+        )
     
 
 if __name__ == "__main__":

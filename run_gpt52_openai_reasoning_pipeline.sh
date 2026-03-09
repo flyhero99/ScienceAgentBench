@@ -4,24 +4,27 @@ set -euo pipefail
 ROOT="/home/ec2-user/ScienceAgentBench"
 cd "$ROOT"
 
-MODEL="us.anthropic.claude-sonnet-4-6"
+if [ -z "${OPENAI_API_KEY:-}" ]; then
+  echo "ERROR: OPENAI_API_KEY is not set."
+  exit 1
+fi
+
+MODEL="gpt-5.2"
 RUN_TAG="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_DIR="${ROOT}/logs/nightly_pipeline"
 mkdir -p "$LOG_DIR"
 
-# You can flip to false if needed.
+# Toggle if needed
 USE_SELF_DEBUG=true
-REASONING_BUDGET_TOKENS=20000
 
-INFER_LOG="claude-sonnet-4-6_sd_ot_oe_${RUN_TAG}.jsonl"
-INFER_VERIFIED_LOG="claude-sonnet-4-6_sd_ot_oe_verified_${RUN_TAG}.jsonl"
-PIPELINE_LOG="${LOG_DIR}/claude46_pipeline_${RUN_TAG}.log"
+INFER_LOG="gpt-5.2_sd_ot_oe_reasoning_medium_${RUN_TAG}.jsonl"
+INFER_VERIFIED_LOG="gpt-5.2_sd_ot_oe_reasoning_medium_verified_${RUN_TAG}.jsonl"
+PIPELINE_LOG="${LOG_DIR}/gpt52_openai_reasoning_pipeline_${RUN_TAG}.log"
 
 echo "Pipeline log: ${PIPELINE_LOG}"
 echo "Run tag: ${RUN_TAG}"
 echo "Model: ${MODEL}"
-echo "Reasoning enabled: true"
-echo "Reasoning budget tokens: ${REASONING_BUDGET_TOKENS}"
+echo "Reasoning effort: medium"
 
 {
   echo "===== [1/4] run_infer.py start $(date -u) ====="
@@ -31,13 +34,15 @@ echo "Reasoning budget tokens: ${REASONING_BUDGET_TOKENS}"
       --log_fname "$INFER_LOG" \
       --use_self_debug \
       --enable_reasoning \
-      --reasoning_budget_tokens "$REASONING_BUDGET_TOKENS"
+      --reasoning_effort medium \
+      --use_responses_api
   else
     python -u run_infer.py \
       --llm_engine_name "$MODEL" \
       --log_fname "$INFER_LOG" \
       --enable_reasoning \
-      --reasoning_budget_tokens "$REASONING_BUDGET_TOKENS"
+      --reasoning_effort medium \
+      --use_responses_api
   fi
   echo "===== [1/4] run_infer.py done $(date -u) ====="
 
@@ -52,13 +57,15 @@ echo "Reasoning budget tokens: ${REASONING_BUDGET_TOKENS}"
       --log_fname "$INFER_VERIFIED_LOG" \
       --use_self_debug \
       --enable_reasoning \
-      --reasoning_budget_tokens "$REASONING_BUDGET_TOKENS"
+      --reasoning_effort medium \
+      --use_responses_api
   else
     python -u run_infer_verified.py \
       --llm_engine_name "$MODEL" \
       --log_fname "$INFER_VERIFIED_LOG" \
       --enable_reasoning \
-      --reasoning_budget_tokens "$REASONING_BUDGET_TOKENS"
+      --reasoning_effort medium \
+      --use_responses_api
   fi
   echo "===== [3/4] run_infer_verified.py done $(date -u) ====="
 
@@ -74,3 +81,4 @@ echo "Reasoning budget tokens: ${REASONING_BUDGET_TOKENS}"
   echo "  - eval_${INFER_LOG}"
   echo "  - eval_${INFER_VERIFIED_LOG}"
 } | tee "$PIPELINE_LOG"
+

@@ -59,6 +59,56 @@ class ScienceAgent():
         self.sys_msg = ""
         self.history = []
 
+    def _normalize_response(self, response_tuple):
+        """
+        Backward-compatible unpack:
+        - legacy engines: (content, prompt_tokens, completion_tokens)
+        - new engines:    (content, prompt_tokens, completion_tokens, meta)
+        """
+        if len(response_tuple) >= 4:
+            content, prompt_tokens, completion_tokens, meta = response_tuple[:4]
+            if meta is None:
+                meta = {}
+        else:
+            content, prompt_tokens, completion_tokens = response_tuple
+            meta = {}
+        return content, int(prompt_tokens or 0), int(completion_tokens or 0), meta
+
+    def _calc_cost(self, prompt_tokens, completion_tokens):
+        input_cost = self.llm_cost["input_cost_per_token"] * prompt_tokens
+        output_cost = self.llm_cost["output_cost_per_token"] * completion_tokens
+        return input_cost + output_cost, input_cost, output_cost
+
+    def _init_usage_summary(self):
+        return {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "reasoning_tokens": 0,
+            "input_cost": 0.0,
+            "output_cost": 0.0,
+            "total_cost": 0.0,
+            "usage_trace": [],
+        }
+
+    def _add_usage(self, usage_summary, stage, prompt_tokens, completion_tokens, reasoning_tokens, input_cost, output_cost):
+        usage_summary["prompt_tokens"] += prompt_tokens
+        usage_summary["completion_tokens"] += completion_tokens
+        usage_summary["reasoning_tokens"] += int(reasoning_tokens or 0)
+        usage_summary["input_cost"] += input_cost
+        usage_summary["output_cost"] += output_cost
+        usage_summary["total_cost"] += input_cost + output_cost
+        usage_summary["usage_trace"].append(
+            {
+                "stage": stage,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "reasoning_tokens": int(reasoning_tokens or 0),
+                "input_cost": input_cost,
+                "output_cost": output_cost,
+                "total_cost": input_cost + output_cost,
+            }
+        )
+
     def get_sys_msg(self, task):
         sys_msg = (
             SYSTEM_PROMPT + "\n\n" + 
@@ -180,7 +230,7 @@ class ScienceAgent():
                 err_msg = "The program does not save its output correctly. Please check if the functions are executed and the output path is correct."
 
         if (not special_err) and exec_res.returncode == 0:
-            return True, 0.0
+            return True, 0.0, {"reasoning_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0, "input_cost": 0.0, "output_cost": 0.0}
         else:
             if not special_err:
                 err_msg = exec_res.stderr.decode("utf-8")
@@ -200,7 +250,7 @@ class ScienceAgent():
                 {'role': 'user', 'content': err_msg}
             ]
 
-            assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(
+            response_tuple = self.llm_engine.respond(
                 user_input,
                 temperature=0.2,
                 top_p=0.95,
@@ -210,11 +260,9 @@ class ScienceAgent():
                 use_responses_api=self.use_responses_api,
                 reasoning_budget_tokens=self.reasoning_budget_tokens,
             )
+            assistant_output, prompt_tokens, completion_tokens, meta = self._normalize_response(response_tuple)
 
-            cost = (
-                self.llm_cost["input_cost_per_token"] * prompt_tokens +
-                self.llm_cost["output_cost_per_token"] * completion_tokens
-            )
+            cost, input_cost, output_cost = self._calc_cost(prompt_tokens, completion_tokens)
 
             early_stopping = self.write_program(assistant_output, out_fname)
 
@@ -223,7 +271,13 @@ class ScienceAgent():
                 {'role': 'assistant', 'content': assistant_output}
             ]
 
-            return early_stopping, cost
+            return early_stopping, cost, {
+                "reasoning_tokens": int(meta.get("reasoning_tokens", 0) or 0),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "input_cost": input_cost,
+                "output_cost": output_cost,
+            }
 
     def solve_task(self, task, out_fname):
         # Clean history
@@ -235,7 +289,9 @@ class ScienceAgent():
             {'role': 'user', 'content': self.sys_msg}
         ]
 
-        assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(
+        usage_summary = self._init_usage_summary()
+
+        response_tuple = self.llm_engine.respond(
             user_input,
             temperature=0.2,
             top_p=0.95,
@@ -245,10 +301,17 @@ class ScienceAgent():
             use_responses_api=self.use_responses_api,
             reasoning_budget_tokens=self.reasoning_budget_tokens,
         )
+        assistant_output, prompt_tokens, completion_tokens, meta = self._normalize_response(response_tuple)
 
-        cost = (
-            self.llm_cost["input_cost_per_token"] * prompt_tokens +
-            self.llm_cost["output_cost_per_token"] * completion_tokens
+        cost, input_cost, output_cost = self._calc_cost(prompt_tokens, completion_tokens)
+        self._add_usage(
+            usage_summary=usage_summary,
+            stage="initial",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            reasoning_tokens=int(meta.get("reasoning_tokens", 0) or 0),
+            input_cost=input_cost,
+            output_cost=output_cost,
         )
 
         self.write_program(assistant_output, out_fname)
@@ -259,8 +322,17 @@ class ScienceAgent():
 
         if self.use_self_debug:
             for t in range(10):
-                halt, new_cost = self.step(out_fname, task["output_fname"])
+                halt, new_cost, usage_info = self.step(out_fname, task["output_fname"])
                 cost += new_cost
+                self._add_usage(
+                    usage_summary=usage_summary,
+                    stage=f"self_debug_{t+1}",
+                    prompt_tokens=int(usage_info.get("prompt_tokens", 0) or 0),
+                    completion_tokens=int(usage_info.get("completion_tokens", 0) or 0),
+                    reasoning_tokens=int(usage_info.get("reasoning_tokens", 0) or 0),
+                    input_cost=float(usage_info.get("input_cost", 0.0) or 0.0),
+                    output_cost=float(usage_info.get("output_cost", 0.0) or 0.0),
+                )
                 if halt:
                     break
 
@@ -268,7 +340,16 @@ class ScienceAgent():
             {'role': 'user', 'content': self.sys_msg}
         ] + self.history
 
-        return {"history": self.history, "cost": cost}
+        return {
+            "history": self.history,
+            "cost": cost,
+            "prompt_tokens": usage_summary["prompt_tokens"],
+            "completion_tokens": usage_summary["completion_tokens"],
+            "reasoning_tokens": usage_summary["reasoning_tokens"],
+            "input_cost": usage_summary["input_cost"],
+            "output_cost": usage_summary["output_cost"],
+            "usage_summary": usage_summary,
+        }
 
 
 if __name__ == "__main__":

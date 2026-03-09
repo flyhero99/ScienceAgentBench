@@ -5,6 +5,25 @@ import requests
 import sys
 
 
+def _get_field(obj, key, default=0):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _extract_reasoning_tokens_from_usage(usage):
+    output_details = _get_field(usage, "output_tokens_details", None)
+    reasoning_tokens = _get_field(output_details, "reasoning_tokens", 0)
+    if reasoning_tokens:
+        return int(reasoning_tokens)
+
+    completion_details = _get_field(usage, "completion_tokens_details", None)
+    reasoning_tokens = _get_field(completion_details, "reasoning_tokens", 0)
+    return int(reasoning_tokens or 0)
+
+
 def _extract_text_from_responses_json(response_json):
     chunks = []
     for item in response_json.get("output", []):
@@ -17,10 +36,12 @@ def _extract_text_from_responses_json(response_json):
 
 def _extract_usage_from_responses_json(response_json):
     usage = response_json.get("usage", {}) or {}
-    # Azure/OpenAI responses use input_tokens/output_tokens naming.
-    prompt_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
-    completion_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
-    return prompt_tokens, completion_tokens
+    prompt_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
+    completion_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
+    reasoning_tokens = int(
+        _get_field(_get_field(usage, "output_tokens_details", {}), "reasoning_tokens", 0) or 0
+    )
+    return prompt_tokens, completion_tokens, reasoning_tokens
 
 
 @backoff.on_exception(backoff.expo, (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError))
@@ -88,7 +109,6 @@ def azure_responses_http(
 
 @backoff.on_exception(backoff.expo, (APIConnectionError, APITimeoutError, RateLimitError, InternalServerError))
 def azure_chat_engine_o3(client, engine, msg, temperature, top_p, max_tokens=32000):
-    # Keep existing o3 parse path untouched in behavior.
     return client.beta.chat.completions.parse(
         model=engine,
         messages=msg,
@@ -136,9 +156,13 @@ class AzureEngine:
                 )
                 content = response.choices[0].message.content or ""
                 usage = getattr(response, "usage", None)
-                prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-                completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-                return content, prompt_tokens, completion_tokens
+                prompt_tokens = int(_get_field(usage, "prompt_tokens", 0) or 0)
+                completion_tokens = int(_get_field(usage, "completion_tokens", 0) or 0)
+                meta = {
+                    "reasoning_tokens": _extract_reasoning_tokens_from_usage(usage),
+                    "api_mode": "chat_completions_o3",
+                }
+                return content, prompt_tokens, completion_tokens, meta
 
             if use_responses_api:
                 response_json = azure_responses_http(
@@ -154,11 +178,14 @@ class AzureEngine:
                     reasoning_effort=reasoning_effort,
                 )
                 content = _extract_text_from_responses_json(response_json)
-                prompt_tokens, completion_tokens = _extract_usage_from_responses_json(response_json)
-                return content, prompt_tokens, completion_tokens
+                prompt_tokens, completion_tokens, reasoning_tokens = _extract_usage_from_responses_json(response_json)
+                meta = {
+                    "reasoning_tokens": reasoning_tokens,
+                    "api_mode": "responses",
+                }
+                return content, prompt_tokens, completion_tokens, meta
 
             try:
-                # Preferred default path: chat completions
                 response = azure_chat_engine(
                     self.client,
                     self.llm_engine_name,
@@ -170,17 +197,18 @@ class AzureEngine:
                     reasoning_effort=reasoning_effort,
                 )
                 choice = response.choices[0]
-                content = choice.message.content
-                if content is None:
-                    content = ""
+                content = choice.message.content or ""
 
                 usage = getattr(response, "usage", None)
-                prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-                completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-                return content, prompt_tokens, completion_tokens
+                prompt_tokens = int(_get_field(usage, "prompt_tokens", 0) or 0)
+                completion_tokens = int(_get_field(usage, "completion_tokens", 0) or 0)
+                meta = {
+                    "reasoning_tokens": _extract_reasoning_tokens_from_usage(usage),
+                    "api_mode": "chat_completions",
+                }
+                return content, prompt_tokens, completion_tokens, meta
 
             except Exception as e:
-                # Auto-fallback to responses endpoint for deployments that require it.
                 error_msg = str(e)
                 if "Unsupported parameter: 'messages'" in error_msg or "Responses API" in error_msg:
                     response_json = azure_responses_http(
@@ -196,10 +224,14 @@ class AzureEngine:
                         reasoning_effort=reasoning_effort,
                     )
                     content = _extract_text_from_responses_json(response_json)
-                    prompt_tokens, completion_tokens = _extract_usage_from_responses_json(response_json)
-                    return content, prompt_tokens, completion_tokens
+                    prompt_tokens, completion_tokens, reasoning_tokens = _extract_usage_from_responses_json(response_json)
+                    meta = {
+                        "reasoning_tokens": reasoning_tokens,
+                        "api_mode": "responses_fallback",
+                    }
+                    return content, prompt_tokens, completion_tokens, meta
                 raise
 
         except Exception as e:
             print(f"ERROR: Can't invoke '{self.llm_engine_name}' on Azure. Reason: {e}")
-            return "ERROR", 0, 0
+            return "ERROR", 0, 0, {"reasoning_tokens": 0, "api_mode": "error"}

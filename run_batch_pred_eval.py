@@ -212,6 +212,26 @@ def calculate_metrics(run_log_path: Path, eval_log_path: Path) -> Dict[str, floa
     return calc_main([str(run_log_path)], [str(eval_log_path)])
 
 
+def extract_success_ids(eval_log_path: Path) -> Dict[str, object]:
+    success_ids_zero_based: List[int] = []
+    with eval_log_path.open("r", encoding="utf-8") as f:
+        for idx, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if row.get("success_rate") == 1:
+                success_ids_zero_based.append(idx)
+
+    success_ids = [i + 1 for i in success_ids_zero_based]
+    return {
+        "success_ids": success_ids,
+        "success_ids_zero_based": success_ids_zero_based,
+        "success_ids_csv": ",".join(map(str, success_ids)),
+        "success_count": len(success_ids),
+    }
+
+
 def main() -> None:
     args = parse_args()
 
@@ -274,8 +294,15 @@ def main() -> None:
                 "valid_program_rate": -1.0,
                 "cost": -1.0,
             }
+            success_info = {
+                "success_ids": [],
+                "success_ids_zero_based": [],
+                "success_ids_csv": "",
+                "success_count": -1,
+            }
         else:
             metrics = calculate_metrics(run_log_path, eval_log_path)
+            success_info = extract_success_ids(eval_log_path)
 
         summary.append(
             {
@@ -284,6 +311,7 @@ def main() -> None:
                 "run_log": str(run_log_path),
                 "eval_log": str(eval_log_path),
                 **metrics,
+                **success_info,
             }
         )
 
@@ -302,6 +330,8 @@ def main() -> None:
         )
         print(f"  run_log: {row['run_log']}")
         print(f"  eval_log: {row['eval_log']}")
+        print(f"  success_ids: {row['success_ids_csv']}")
+        print(f"  success_count: {row['success_count']}")
     print(f"Summary written to: {summary_path}")
 
 

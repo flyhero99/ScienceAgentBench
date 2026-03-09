@@ -33,12 +33,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run_id",
         type=str,
-        default="502",
+        default="302",
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="/home/ec2-user/ScienceAgentBench/codex_cli_outputs_gpt52_fixed_images",
+        default="/home/ec2-user/ScienceAgentBench/new_folder",
     )
     parser.add_argument(
         "--category_keyword",

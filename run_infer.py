@@ -32,7 +32,11 @@ def main(args):
         args.llm_engine_name,
         context_cutoff=args.context_cutoff,
         use_self_debug=args.use_self_debug,
-        use_knowledge=args.use_knowledge
+        use_knowledge=args.use_knowledge,
+        enable_reasoning=args.enable_reasoning,
+        reasoning_effort=args.reasoning_effort,
+        use_responses_api=args.use_responses_api,
+        reasoning_budget_tokens=args.reasoning_budget_tokens,
     )
 
     out_fpath = Path(args.out_fpath)
@@ -100,6 +104,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_knowledge",
         action="store_true"
+    )
+    parser.add_argument(
+        "--enable_reasoning",
+        action="store_true",
+        help="Enable reasoning/thinking mode when supported by the selected engine.",
+    )
+    parser.add_argument(
+        "--reasoning_effort",
+        type=str,
+        default="medium",
+        choices=["low", "medium", "high"],
+        help="Reasoning effort for OpenAI/Azure reasoning-capable models.",
+    )
+    parser.add_argument(
+        "--use_responses_api",
+        action="store_true",
+        help="Use Responses API path for OpenAI/Azure engines (recommended for reasoning models).",
+    )
+    parser.add_argument(
+        "--reasoning_budget_tokens",
+        type=int,
+        default=20000,
+        help="Thinking budget tokens for Bedrock reasoning models.",
     )
 
     args = parser.parse_args()

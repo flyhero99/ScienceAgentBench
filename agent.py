@@ -34,13 +34,27 @@ Here are some helpful previews for the dataset file(s):
 
 
 class ScienceAgent():
-    def __init__(self, llm_engine_name, context_cutoff=28000, use_self_debug=False, use_knowledge=False):
+    def __init__(
+        self,
+        llm_engine_name,
+        context_cutoff=28000,
+        use_self_debug=False,
+        use_knowledge=False,
+        enable_reasoning=False,
+        reasoning_effort="medium",
+        use_responses_api=False,
+        reasoning_budget_tokens=20000,
+    ):
         self.llm_engine = LLMEngine(llm_engine_name, api_key=os.getenv("AZURE_OPENAI_API_KEY"), api_version=os.getenv("AZURE_OPENAI_API_VERSION"), azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"))
         self.llm_cost = model_cost[llm_engine_name] if "azure_" not in llm_engine_name else model_cost[llm_engine_name.split("azure_")[1]]
 
         self.context_cutoff = context_cutoff
         self.use_self_debug = use_self_debug
         self.use_knowledge = use_knowledge
+        self.enable_reasoning = enable_reasoning
+        self.reasoning_effort = reasoning_effort
+        self.use_responses_api = use_responses_api
+        self.reasoning_budget_tokens = reasoning_budget_tokens
 
         self.sys_msg = ""
         self.history = []
@@ -186,7 +200,16 @@ class ScienceAgent():
                 {'role': 'user', 'content': err_msg}
             ]
 
-            assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(user_input, temperature=0.2, top_p=0.95, max_tokens=16000)
+            assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(
+                user_input,
+                temperature=0.2,
+                top_p=0.95,
+                max_tokens=16000,
+                enable_reasoning=self.enable_reasoning,
+                reasoning_effort=self.reasoning_effort,
+                use_responses_api=self.use_responses_api,
+                reasoning_budget_tokens=self.reasoning_budget_tokens,
+            )
 
             cost = (
                 self.llm_cost["input_cost_per_token"] * prompt_tokens +
@@ -212,7 +235,16 @@ class ScienceAgent():
             {'role': 'user', 'content': self.sys_msg}
         ]
 
-        assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(user_input, temperature=0.2, top_p=0.95, max_tokens=16000)
+        assistant_output, prompt_tokens, completion_tokens = self.llm_engine.respond(
+            user_input,
+            temperature=0.2,
+            top_p=0.95,
+            max_tokens=16000,
+            enable_reasoning=self.enable_reasoning,
+            reasoning_effort=self.reasoning_effort,
+            use_responses_api=self.use_responses_api,
+            reasoning_budget_tokens=self.reasoning_budget_tokens,
+        )
 
         cost = (
             self.llm_cost["input_cost_per_token"] * prompt_tokens +

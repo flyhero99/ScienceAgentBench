@@ -1,7 +1,7 @@
-EVAL_LOGS="eval_claude-sonnet-4-6_sd_ot_oe_run1.jsonl"
+EVAL_LOGS="eval_gpt-5.2_sd_vt_oe_run1_merged_21_32_78.jsonl"
 
 python calculate_metrics.py \
---run_logs claude-sonnet-4-6_sd_ot_oe_run1.jsonl \
+--run_logs gpt-5.2_sd_vt_oe_run1.jsonl \
 --eval_logs $EVAL_LOGS
 
 python - << EOF

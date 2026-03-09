@@ -1,9 +1,7 @@
 from botocore.exceptions import ClientError, ReadTimeoutError
 from botocore.client import Config
-
 import boto3
 import base64
-
 def bedrock_converse_engine(
     client,
     engine,
@@ -31,7 +29,6 @@ def bedrock_converse_engine(
                 "budget_tokens": budget_tokens,
             }
         }
-
     # Anthropic thinking mode constraint on Bedrock:
     # when thinking is enabled, temperature must be exactly 1.
     # Also avoid setting both temperature and topP together.
@@ -49,7 +46,6 @@ def bedrock_converse_engine(
             inference_cfg["temperature"] = temperature
         if top_p is not None:
             inference_cfg["topP"] = top_p
-
     converse_kwargs = dict(
         modelId=engine,
         messages=msg,
@@ -57,12 +53,9 @@ def bedrock_converse_engine(
     )
     if reasoning_config is not None:
         converse_kwargs["additionalModelRequestFields"] = reasoning_config
-
     response = client.converse(**converse_kwargs)
     return response
-
 class BedrockEngine():
-
     def __init__(self, llm_engine_name):
         self.client = boto3.client(
             "bedrock-runtime", 
@@ -70,7 +63,6 @@ class BedrockEngine():
             config=Config(retries={"total_max_attempts": 3}, read_timeout=1200)
         )
         self.llm_engine_name = llm_engine_name
-
     def respond(
         self,
         user_input,
@@ -93,7 +85,6 @@ class BedrockEngine():
         if enable_reasoning:
             enable_thinking = True
             budget_tokens = reasoning_budget_tokens
-
         conversation = []
         for turn in user_input:
             content = turn.get("content")
@@ -140,7 +131,6 @@ class BedrockEngine():
             else:
                 # Text-only content
                 conversation.append({"role": turn["role"], "content": [{"text": str(content)}]})
-
         try:
             response = bedrock_converse_engine(
                 self.client, 
@@ -155,15 +145,33 @@ class BedrockEngine():
         except (ClientError, Exception) as e:
             print(f"ERROR: Can't invoke '{self.llm_engine_name}'. Reason: {e}")
             return "ERROR", 0, 0, {"reasoning_tokens": 0, "api_mode": "error"}
-
+        content_items = response.get("output", {}).get("message", {}).get("content", [])
+        text_chunks = []
+        for item in content_items:
+            if isinstance(item, dict) and "text" in item and item.get("text") is not None:
+                text_chunks.append(str(item.get("text")))
+        content_text = "\n".join(text_chunks).strip()
+        if not content_text:
+            print(
+                f"WARNING: Bedrock '{self.llm_engine_name}' returned no text block in content; "
+                f"content item types={[list(i.keys()) if isinstance(i, dict) else type(i).__name__ for i in content_items]}"
+            )
+        usage = response.get("usage", {}) or {}
+        prompt_tokens = int(usage.get("inputTokens", 0) or 0)
+        completion_tokens = int(usage.get("outputTokens", 0) or 0)
+        # Bedrock may not expose reasoning tokens; try common keys if available.
+        reasoning_tokens = 0
+        if isinstance(usage.get("outputTokensDetails"), dict):
+            reasoning_tokens = int(usage["outputTokensDetails"].get("reasoningTokens", 0) or 0)
+        if reasoning_tokens == 0:
+            reasoning_tokens = int(usage.get("reasoningTokens", usage.get("reasoning_tokens", 0)) or 0)
         return (
-            response["output"]["message"]["content"][0]["text"],
-            response["usage"]["inputTokens"],
-            response["usage"]["outputTokens"],
-            {"reasoning_tokens": 0, "api_mode": "bedrock_converse"},
+            content_text,
+            prompt_tokens,
+            completion_tokens,
+            {"reasoning_tokens": reasoning_tokens, "api_mode": "bedrock_converse"},
         )
     
-
 if __name__ == "__main__":
     # Simple local test for thinking mode
     # Choose a recent Claude Sonnet deployment; adjust if your deployment name differs.

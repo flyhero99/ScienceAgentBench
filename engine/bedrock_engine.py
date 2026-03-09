@@ -29,7 +29,12 @@ def bedrock_converse_engine(
             }
         }
 
-    if temperature is not None and top_p is not None:
+    # Anthropic thinking mode constraint on Bedrock:
+    # when thinking is enabled, temperature must be exactly 1.
+    # Also avoid setting both temperature and topP together.
+    if enable_thinking:
+        inference_cfg = {"maxTokens": maxTokens, "temperature": 1}
+    elif temperature is not None and top_p is not None:
         # Drop topP to satisfy Anthropic constraint
         inference_cfg = {"maxTokens": maxTokens, "temperature": temperature}
     elif temperature is None and top_p is not None:

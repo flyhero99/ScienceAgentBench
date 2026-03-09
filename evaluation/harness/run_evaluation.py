@@ -297,7 +297,7 @@ def main(
     num_instances = len(dataset)
     evaluated_indices = set()
     evaluated_logs = [None] * num_instances
-
+    print("log_fname:", log_fname)
     if Path(log_fname).exists():
         with open(log_fname, "r", encoding="utf-8") as log_f:
             for idx, line in enumerate(log_f):

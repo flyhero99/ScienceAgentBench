@@ -6,12 +6,12 @@ RUN_TAG="$(date -u +%Y%m%dT%H%M%SZ)"
 BASE_OUTPUT_DIR="${ROOT}/batch_eval_outputs/${RUN_TAG}"
 
 EXP_DIRS=(
-  "${ROOT}/claude_code_outputs_opus46"
-  "${ROOT}/claude_code_outputs_sonnet46"
-  "${ROOT}/codex_cli_outputs_gpt52"
+  "${ROOT}/claude_code_outputs_opus46_fixed"
+  "${ROOT}/claude_code_outputs_sonnet46_fixed"
+  "${ROOT}/codex_cli_outputs_gpt52_fixed"
 )
 
-RUN_ID_START=300
+RUN_ID_START=500
 
 for i in "${!EXP_DIRS[@]}"; do
   EXP_DIR="${EXP_DIRS[$i]}"

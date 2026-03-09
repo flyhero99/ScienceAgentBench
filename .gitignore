@@ -188,3 +188,10 @@ docker_run.sh
 run_eval_old.sh
 
 *.zip
+
+
+claude_code_outputs*
+codex_cli_outputs*
+batch_eval_outputs*
+benchmark*
+*.bak

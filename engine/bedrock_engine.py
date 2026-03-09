@@ -22,6 +22,9 @@ def bedrock_converse_engine(
     """
     reasoning_config = None
     if enable_thinking:
+        # Bedrock validation requires: maxTokens > thinking.budget_tokens
+        if budget_tokens >= maxTokens:
+            budget_tokens = max(1, maxTokens - 1)
         reasoning_config = {
             "thinking": {
                 "type": "enabled",

@@ -1,4 +1,11 @@
-from openai import OpenAI, APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
+from openai import (
+    OpenAI,
+    APIConnectionError,
+    APITimeoutError,
+    RateLimitError,
+    InternalServerError,
+    BadRequestError,
+)
 
 import backoff
 
@@ -81,7 +88,21 @@ def openai_responses_engine(
     if enable_reasoning:
         kwargs["reasoning"] = {"effort": reasoning_effort}
 
-    return client.responses.create(**kwargs)
+    try:
+        return client.responses.create(**kwargs)
+    except BadRequestError as e:
+        # Some reasoning models reject temperature/top_p on Responses API.
+        msg_text = str(e)
+        changed = False
+        if "Unsupported parameter: 'temperature'" in msg_text and "temperature" in kwargs:
+            kwargs.pop("temperature", None)
+            changed = True
+        if "Unsupported parameter: 'top_p'" in msg_text and "top_p" in kwargs:
+            kwargs.pop("top_p", None)
+            changed = True
+        if changed:
+            return client.responses.create(**kwargs)
+        raise
 
 
 class OpenaiEngine:

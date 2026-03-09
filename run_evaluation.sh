@@ -52,7 +52,7 @@ python -m evaluation.harness.run_evaluation \
     --pred_program_path pred_programs \
     --log_fname "$EVAL_LOG_FNAME" \
     --run_id "$NEXT_RUN_ID" \
-    --force_rebuild True \
+    --force_rebuild False \
     --cache_level base \
     --max_workers 8
 

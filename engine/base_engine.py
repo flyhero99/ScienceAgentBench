@@ -32,7 +32,18 @@ class LLMEngine():
             from .bedrock_engine import BedrockEngine
             self.engine = BedrockEngine(llm_engine_name)
 
-    def respond(self, user_input, temperature, top_p, max_tokens):
+    def respond(self, user_input, temperature, top_p, max_tokens, **kwargs):
+        """
+        Backward-compatible wrapper.
+        Newer engines may accept extra kwargs (e.g., reasoning controls), while
+        older code paths continue to work with the original 4-arg call.
+        """
+        if kwargs:
+            try:
+                return self.engine.respond(user_input, temperature, top_p, max_tokens, **kwargs)
+            except TypeError:
+                # Engine doesn't support extra kwargs yet; fall back to legacy call.
+                pass
         return self.engine.respond(user_input, temperature, top_p, max_tokens)
     
     def respond_structured(self, user_input, struct_format, temperature, top_p, max_tokens):

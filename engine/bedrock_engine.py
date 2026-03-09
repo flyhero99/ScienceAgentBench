@@ -63,12 +63,29 @@ class BedrockEngine():
         )
         self.llm_engine_name = llm_engine_name
 
-    def respond(self, user_input, temperature, top_p, max_tokens=32000, enable_thinking=False, budget_tokens=20000):
+    def respond(
+        self,
+        user_input,
+        temperature,
+        top_p,
+        max_tokens=32000,
+        enable_thinking=False,
+        budget_tokens=20000,
+        enable_reasoning=False,
+        reasoning_effort="medium",
+        use_responses_api=False,
+        reasoning_budget_tokens=20000,
+    ):
         """
         Process user input and get response from Bedrock API.
         Supports both text and multimodal (text + image) messages.
         For multimodal messages, content should be a list with text and image_url items.
         """
+        # Unified reasoning flags for cross-engine compatibility.
+        if enable_reasoning:
+            enable_thinking = True
+            budget_tokens = reasoning_budget_tokens
+
         conversation = []
         for turn in user_input:
             content = turn.get("content")

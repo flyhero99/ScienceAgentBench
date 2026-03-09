@@ -11,7 +11,7 @@ EXP_DIRS=(
   "${ROOT}/codex_cli_outputs_gpt52_21_32_78"
 )
 
-RUN_ID_START=300
+RUN_ID_START=500
 
 for i in "${!EXP_DIRS[@]}"; do
   EXP_DIR="${EXP_DIRS[$i]}"

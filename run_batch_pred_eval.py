@@ -188,6 +188,8 @@ def run_evaluation(
         str(eval_log_path),
         "--run_id",
         str(run_id),
+        # "--instance_ids",
+        # str("9 12 21 26 29 31 32 34 35 67 78 92"),
         "--force_rebuild",
         args.force_rebuild,
         "--cache_level",
